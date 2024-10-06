@@ -12,6 +12,7 @@ python = "^3.10"
 typer = "^0.12.5"
 requests = "^2.32.3"
 questionary = "^2.0.1"
+pyxdg = "^0.28"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
