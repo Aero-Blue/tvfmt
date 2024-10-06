@@ -147,8 +147,12 @@ class TvFormatter:
     def format_filename(
         show_name: str, season_num: int, episode_num: int, episode_name: str, ext: str
     ) -> str:
-        # avoid :'s in filenames
-        return f"{show_name.replace(':','')} S{season_num:02}E{episode_num:02} {episode_name}{ext}"
+        # remove invalid characters from filename
+        invalid_chars = [":", "/", "\\", "?", "*", "<", ">", "|", "[", "]" '"', "'"]
+        filename = f"{show_name} S{season_num:02}E{episode_num:02} {episode_name}{ext}"
+        for c in invalid_chars:
+            filename = filename.replace(c, "")
+        return filename
 
     def run(self, path: Path, show: str, season: int, auto: bool, user_confirm: bool):
         if not (path.exists() and path.is_dir()):
