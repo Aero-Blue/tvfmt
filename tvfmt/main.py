@@ -1,20 +1,21 @@
 import os
 import re
 from dataclasses import dataclass
+from enum import Enum
 from functools import wraps
 from pathlib import Path
 from typing import Annotated, List, Tuple
 
 import questionary
 import typer
-from rich.console import Console
 from rich.panel import Panel
 
 from tvfmt import utils
 from tvfmt.api import TraktAPI, TvEpisode, TvShow, TvSeason
+from tvfmt.globals import console
+from tvfmt.config import cli_config, CliConfigKey
 
 app = typer.Typer()
-console = Console()
 
 
 def exit_on_null(message: str = ""):
@@ -31,9 +32,12 @@ def exit_on_null(message: str = ""):
     return decorator
 
 
-@exit_on_null("Environment variable TRAKT_API_KEY not set.")
+@exit_on_null("TRAKT_API_KEY not set in config or as an environment variable.")
 def get_api_key():
-    return os.environ.get("TRAKT_API_KEY")
+    trakt_api_key = os.environ.get("TRAKT_API_KEY")
+    if not trakt_api_key:
+        trakt_api_key = cli_config.get(CliConfigKey.TRAKT_API_KEY)
+    return trakt_api_key
 
 
 def error(message: str):
@@ -143,7 +147,8 @@ class TvFormatter:
     def format_filename(
         show_name: str, season_num: int, episode_num: int, episode_name: str, ext: str
     ) -> str:
-        return f"{show_name} S{season_num:02}E{episode_num:02} {episode_name}{ext}"
+        # avoid :'s in filenames
+        return f"{show_name.replace(':','')} S{season_num:02}E{episode_num:02} {episode_name}{ext}"
 
     def run(self, path: Path, show: str, season: int, auto: bool, user_confirm: bool):
         if not (path.exists() and path.is_dir()):
@@ -161,17 +166,48 @@ class TvFormatter:
         console.print("Done!", style="bold green")
 
 
-@app.command()
+@app.command("config")
+def config(
+    open_file: Annotated[bool, typer.Option("--open", "-o")] = False,
+    set_key: Annotated[
+        Tuple[CliConfigKey, str], typer.Option("--set", "-s", metavar="<KEY, VALUE>")
+    ] = (
+        None,
+        None,
+    ),
+    get_key: Annotated[
+        CliConfigKey, typer.Option("--get", "-g", metavar="<KEY>")
+    ] = None,
+):
+    if open_file:
+        typer.launch(str(cli_config.get_file()))
+    elif get_key:
+        console.print(f"{get_key.value} = {cli_config.get(get_key)}")
+    elif set_key != (None, None):
+        key, value = set_key
+        if cli_config.set(key, value):
+            console.print(f"Set {key.value}: {value}")
+    else:
+        console.print(
+            Panel(
+                str(cli_config),
+                title=f"{cli_config.get_file()}",
+                border_style="bold yellow",
+            )
+        )
+
+
+@app.command("run")
 def cli(
     path: Annotated[Path, typer.Argument(metavar="PATH")] = ".",
     show: Annotated[str, typer.Option(help="Name of TV Show")] = None,
     season: Annotated[int, typer.Option(help="Season number")] = None,
     auto: Annotated[
         bool, typer.Option(help="Auto-select closest match to given show name")
-    ] = False,
+    ] = cli_config.get(CliConfigKey.AUTO),
     confirm: Annotated[
         bool, typer.Option(help="Confirm changes before renaming files")
-    ] = True,
+    ] = cli_config.get(CliConfigKey.CONFIRM),
     api_key: Annotated[str, typer.Option()] = get_api_key(),
 ):
     api = TraktAPI(trakt_api_key=api_key)
